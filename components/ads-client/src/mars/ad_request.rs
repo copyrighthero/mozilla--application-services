@@ -11,6 +11,7 @@ use url::Url;
 use viaduct::{Headers, Request};
 
 use super::error::BuildRequestError;
+use crate::http_cache::hash_url;
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct AdRequest {
@@ -28,9 +29,13 @@ pub struct AdRequest {
 /// Hash implementation intentionally excludes `context_id` as it rotates
 /// on client re-instantiation and should not invalidate cached responses.
 /// `headers` are also excluded as they are request metadata, not cache keys.
+///
+/// The URL is hashed via `hash_url` so that semantically equivalent
+/// URLs (same scheme/host/port/path and same query pairs in any order) share
+/// a cache slot.
 impl Hash for AdRequest {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.url.as_str().hash(state);
+        hash_url(&self.url, state);
         self.placements.hash(state);
         self.ohttp.hash(state);
     }
@@ -320,6 +325,30 @@ mod tests {
         .unwrap();
 
         assert_ne!(RequestHash::new(&req1), RequestHash::new(&req2));
+    }
+
+    #[test]
+    fn test_query_param_order_does_not_affect_request_hash() {
+        use crate::http_cache::RequestHash;
+
+        let url_a: Url = "https://example.com/ads?b=2&a=1".parse().unwrap();
+        let url_b: Url = "https://example.com/ads?a=1&b=2".parse().unwrap();
+        let make_placements = || {
+            vec![AdPlacementRequest {
+                content: None,
+                count: 1,
+                placement: "tile_1".to_string(),
+            }]
+        };
+
+        let req_a = AdRequest::try_new("ctx".to_string(), make_placements(), url_a, false).unwrap();
+        let req_b = AdRequest::try_new("ctx".to_string(), make_placements(), url_b, false).unwrap();
+
+        assert_eq!(
+            RequestHash::new(&req_a),
+            RequestHash::new(&req_b),
+            "Query-param ordering must not affect the cache key",
+        );
     }
 
     #[test]
