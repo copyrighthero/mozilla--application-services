@@ -7,12 +7,15 @@ use crate::http_cache::RequestHash;
 use crate::telemetry::Telemetry;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use url::Url;
 
+/// `data` is a `BTreeMap` (not `HashMap`) so iteration in `enrich_callbacks`
+/// and other internal traversals is deterministic by placement_id. Public
+/// APIs that return `HashMap<String, _>` collect at the boundary.
 #[derive(Debug, PartialEq, Serialize)]
 pub struct AdResponse<A: AdResponseValue> {
-    pub data: HashMap<String, Vec<A>>,
+    pub data: BTreeMap<String, Vec<A>>,
 }
 
 impl<A: AdResponseValue> AdResponse<A> {
@@ -21,7 +24,7 @@ impl<A: AdResponseValue> AdResponse<A> {
         telemetry: &T,
     ) -> Result<AdResponse<A>, serde_json::Error> {
         let raw: HashMap<String, serde_json::Value> = serde_json::from_value(data)?;
-        let mut result = HashMap::new();
+        let mut result = BTreeMap::new();
 
         for (key, value) in raw {
             if let serde_json::Value::Array(arr) = value {
@@ -329,7 +332,7 @@ mod tests {
             AdResponse::<AdImage>::parse(raw_ad_response, &MozAdsTelemetryWrapper::noop()).unwrap();
 
         let expected = AdResponse {
-            data: HashMap::from([(
+            data: BTreeMap::from([(
                 "valid_ad".to_string(),
                 vec![AdImage {
                     url: "https://ads.fakeexample.org/example_ad_3".to_string(),
@@ -366,7 +369,7 @@ mod tests {
             AdResponse::<AdImage>::parse(raw_ad_response, &MozAdsTelemetryWrapper::noop()).unwrap();
 
         let expected = AdResponse {
-            data: HashMap::from([]),
+            data: BTreeMap::from([]),
         };
 
         assert_eq!(parsed, expected);
@@ -375,7 +378,7 @@ mod tests {
     #[test]
     fn test_take_first() {
         let mut response = AdResponse {
-            data: HashMap::new(),
+            data: BTreeMap::new(),
         };
         response.data.insert(
             "placement_1".to_string(),
@@ -442,7 +445,7 @@ mod tests {
     #[test]
     fn test_enrich_callbacks() {
         let mut response = AdResponse {
-            data: HashMap::from([(
+            data: BTreeMap::from([(
                 "mock_tile_1".to_string(),
                 vec![
                     AdImage {
@@ -517,7 +520,7 @@ mod tests {
     #[test]
     fn test_enrich_callbacks_skips_ads_without_report_url() {
         let mut response = AdResponse {
-            data: HashMap::from([(
+            data: BTreeMap::from([(
                 "mock_tile_1".to_string(),
                 vec![AdImage {
                     alt_text: None,
@@ -573,5 +576,25 @@ mod tests {
         let extracted_empty = pop_request_hash_from_url(&mut url_no_query);
         assert_eq!(extracted_empty, None);
         assert_eq!(url_no_query.query(), None);
+    }
+
+    /// Locks `AdResponse.data` to a `BTreeMap` so iteration in
+    /// `enrich_callbacks` is deterministic regardless of insertion order.
+    /// Constructs the response with `BTreeMap::from(...)` directly so a
+    /// regression to `HashMap` produces a compile error here.
+    #[test]
+    fn test_ad_response_iterates_placements_in_sorted_order() {
+        use std::collections::BTreeMap;
+
+        let response: AdResponse<AdImage> = AdResponse {
+            data: BTreeMap::from([
+                ("zebra".to_string(), Vec::<AdImage>::new()),
+                ("apple".to_string(), Vec::<AdImage>::new()),
+                ("mango".to_string(), Vec::<AdImage>::new()),
+            ]),
+        };
+
+        let observed: Vec<&str> = response.data.keys().map(String::as_str).collect();
+        assert_eq!(observed, vec!["apple", "mango", "zebra"]);
     }
 }

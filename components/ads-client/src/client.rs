@@ -185,7 +185,7 @@ where
             })
             .map(|response| {
                 self.telemetry.record(&ClientOperationEvent::RequestAds);
-                response.data
+                response.data.into_iter().collect()
             })
     }
 

@@ -3,7 +3,7 @@
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use url::Url;
 
@@ -40,7 +40,7 @@ pub fn make_happy_placement_requests() -> Vec<AdPlacementRequest> {
 pub fn get_example_happy_image_response() -> AdResponse<AdImage> {
     let base_url = mockito::server_url();
     AdResponse {
-        data: HashMap::from([
+        data: BTreeMap::from([
             (
                 "example_placement_1".to_string(),
                 vec![AdImage {
@@ -83,7 +83,7 @@ pub fn get_example_happy_image_response() -> AdResponse<AdImage> {
 
 pub fn get_example_happy_spoc_response() -> AdResponse<AdSpoc> {
     AdResponse {
-        data: HashMap::from([
+        data: BTreeMap::from([
             (
                 "example_placement_1".to_string(),
                 vec![AdSpoc {
@@ -160,7 +160,7 @@ pub fn get_example_happy_spoc_response() -> AdResponse<AdSpoc> {
 
 pub fn get_example_happy_uatile_response() -> AdResponse<AdTile> {
     AdResponse {
-        data: HashMap::from([
+        data: BTreeMap::from([
             (
                 "example_placement_1".to_string(),
                 vec![AdTile {
